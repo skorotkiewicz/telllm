@@ -23,7 +23,7 @@ struct Args {
     port: u16,
 
     /// LLM API endpoint
-    #[arg(short, long, default_value = "http://192.168.0.124:8888/v1")]
+    #[arg(short, long, default_value = "http://localhost:8080/v1")]
     endpoint: String,
 
     /// Model name

@@ -25,7 +25,7 @@ cargo build --release
 # With custom settings
 ./target/release/telllm \
     --port 2323 \
-    --endpoint "http://192.168.0.124:8888/v1" \
+    --endpoint "http://localhost:8080/v1" \
     --model "llama3" \
     --system-prompt "You are a helpful AI assistant. Be concise and friendly."
 
@@ -38,7 +38,7 @@ cargo build --release
 | Option | Short | Default | Description |
 |--------|-------|---------|-------------|
 | `--port` | `-p` | 2323 | Port to listen on |
-| `--endpoint` | `-e` | http://192.168.0.124:8888/v1 | LLM API endpoint |
+| `--endpoint` | `-e` | http://localhost:8080/v1 | LLM API endpoint |
 | `--model` | `-m` | default | Model name |
 | `--api-key` | `-k` | (empty) | API key (optional) |
 | `--system-prompt` | `-s` | "You are a helpful..." | Custom system prompt |
