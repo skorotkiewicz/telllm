@@ -42,17 +42,36 @@ struct SessionState {
 }
 
 impl SessionState {
-    fn new(system_prompt: &str) -> Self {
+    fn new(system_prompt: &str, user_name: Option<String>) -> Self {
+        let full_prompt = Self::build_system_prompt(system_prompt, user_name.as_deref());
         Self {
             messages: vec![Message {
                 role: "system".to_string(),
-                content: system_prompt.to_string(),
+                content: full_prompt,
             }],
-            user_name: None,
+            user_name,
         }
     }
 
-    fn handle_command(&mut self, input: &str, logger: &ChatLogger, addr: &SocketAddr) -> CommandResult {
+    fn build_system_prompt(base_prompt: &str, user_name: Option<&str>) -> String {
+        match user_name {
+            Some(name) => format!(
+                "{}\n\nThe user's name is {}. Address them by name when appropriate.",
+                base_prompt, name
+            ),
+            None => base_prompt.to_string(),
+        }
+    }
+
+    fn update_user_name(&mut self, name: &str, base_prompt: &str) {
+        self.user_name = Some(name.to_string());
+        // Update the system prompt with the new name
+        if let Some(msg) = self.messages.first_mut() {
+            msg.content = Self::build_system_prompt(base_prompt, Some(name));
+        }
+    }
+
+    fn handle_command(&mut self, input: &str, logger: &ChatLogger, addr: &SocketAddr, base_prompt: &str) -> CommandResult {
         let parts: Vec<&str> = input.splitn(2, ' ').collect();
         let cmd = parts[0].to_lowercase();
         let arg = parts.get(1).map(|s| s.trim());
@@ -61,7 +80,7 @@ impl SessionState {
             "/quit" | "/exit" | "/q" => CommandResult::Quit,
             "/name" => {
                 if let Some(name) = arg {
-                    self.user_name = Some(name.to_string());
+                    self.update_user_name(name, base_prompt);
                     if let Err(e) = logger.update_summary("name", name) {
                         return CommandResult::Message(format!("\nError saving name: {}\n", e));
                     }
@@ -121,16 +140,17 @@ impl Session {
         let logger = ChatLogger::new(&self.logs_dir, self.addr.ip())?;
         logger.log_session_start()?;
 
-        let mut state = SessionState::new(&self.system_prompt);
-
         // Load existing summary to get user name
+        let mut user_name: Option<String> = None;
         if let Some(summary) = logger.get_summary() {
             for line in summary.lines() {
                 if line.to_lowercase().starts_with("name:") {
-                    state.user_name = line.splitn(2, ':').nth(1).map(|s| s.trim().to_string());
+                    user_name = line.splitn(2, ':').nth(1).map(|s| s.trim().to_string());
                 }
             }
         }
+
+        let mut state = SessionState::new(&self.system_prompt, user_name);
 
         let (read_half, write_half) = self.stream.split();
         let mut reader = BufReader::new(read_half);
@@ -169,7 +189,7 @@ impl Session {
 
                     // Handle commands
                     if input.starts_with('/') {
-                        match state.handle_command(&input, &logger, &self.addr) {
+                        match state.handle_command(&input, &logger, &self.addr, &self.system_prompt) {
                             CommandResult::Quit => {
                                 writer.write_all(b"\nGoodbye!\n").await?;
                                 writer.flush().await?;
@@ -239,6 +259,7 @@ impl Session {
         }
 
         logger.log_session_end()?;
+        logger.touch_last_seen()?;
         Ok(())
     }
 }

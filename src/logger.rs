@@ -138,4 +138,45 @@ impl ChatLogger {
     pub fn get_summary(&self) -> Option<String> {
         fs::read_to_string(self.summary_file_path()).ok()
     }
+
+    /// Update just the last_seen timestamp in the summary
+    pub fn touch_last_seen(&self) -> Result<()> {
+        let summary_path = self.summary_file_path();
+        
+        // Read existing summary
+        let existing = fs::read_to_string(&summary_path).unwrap_or_default();
+        
+        // Parse into key-value pairs
+        let mut entries: Vec<(String, String)> = existing
+            .lines()
+            .filter_map(|line| {
+                let parts: Vec<&str> = line.splitn(2, ": ").collect();
+                if parts.len() == 2 {
+                    Some((parts[0].to_string(), parts[1].to_string()))
+                } else {
+                    None
+                }
+            })
+            .collect();
+
+        // Update or add last_seen
+        let now = Local::now().format("%d-%m-%Y %H:%M:%S").to_string();
+        if let Some(entry) = entries.iter_mut().find(|(k, _)| k == "last_seen") {
+            entry.1 = now;
+        } else {
+            entries.push(("last_seen".to_string(), now));
+        }
+
+        // Write back
+        let content: String = entries
+            .iter()
+            .map(|(k, v)| format!("{}: {}", k, v))
+            .collect::<Vec<_>>()
+            .join("\n");
+
+        fs::write(&summary_path, content + "\n")
+            .context("Failed to write summary file")?;
+
+        Ok(())
+    }
 }
